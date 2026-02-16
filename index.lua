@@ -6,8 +6,15 @@ local state = {
   right_buf = nil,
 }
 
+local cursor_move_group = 'cursor_move'
+
 local function create_buf()
-  return vim.api.nvim_create_buf(false, true)
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.bo[buf].modifiable = true
+  vim.bo[buf].swapfile = false
+  vim.bo[buf].buftype = 'nofile'
+  vim.bo[buf].bufhidden = 'wipe'
+  return buf
 end
 
 local function get_modal_config()
@@ -28,8 +35,23 @@ local function get_modal_config()
   }
 end
 
+local function get_files()
+  -- TODO: use vim.system for this
+  return vim.fn.systemlist('git diff --name-only')
+end
+
+local function get_file_diff(file)
+  local result = vim.system(
+    { 'git', 'diff', '--', file },
+    { text = true }
+  ):wait()
+  if result.code ~= 0 then return nil end
+  return result.stdout
+end
+
 local function open_modal()
   local right_buf = create_buf()
+  vim.bo[right_buf].filetype = 'diff'
   local left_buf = create_buf()
 
   local config = get_modal_config()
@@ -62,18 +84,33 @@ local function open_modal()
   state.left_buf = left_buf
   state.right_buf = right_buf
 
-  vim.api.nvim_buf_set_lines(state.left_buf, 0, -1, true, { "first file", "second file" })
-  vim.api.nvim_buf_set_lines(state.right_buf, 0, -1, true, { "diffs will apear here" })
+  local files = get_files()
+
+  vim.api.nvim_buf_set_lines(state.left_buf, 0, -1, true, files)
+  vim.api.nvim_buf_set_lines(state.right_buf, 0, -1, true, { 'diffs will apear here' })
 
   vim.api.nvim_set_option_value('winhighlight', 'CursorLine:MyPluginCursorLine', { win = left_win })
   vim.api.nvim_set_option_value('cursorline', true, { win = left_win })
   vim.api.nvim_set_option_value('number', true, { win = left_win })
+  vim.api.nvim_set_option_value('relativenumber', true, { win = left_win })
+
+  local group = vim.api.nvim_create_augroup(cursor_move_group, { clear = true })
+  vim.api.nvim_create_autocmd('CursorMoved', {
+    group = group,
+    callback = function()
+      local row = vim.api.nvim_win_get_cursor(left_win)[1]
+      local current_file = files[row]
+      local diff = get_file_diff(current_file)
+      vim.api.nvim_buf_set_lines(state.right_buf, 0, -1, true, diff and vim.split(diff, '\n') or { 'no changes' })
+    end
+  })
 end
 
 local function close_win()
   vim.api.nvim_win_close(state.left_win, true)
   vim.api.nvim_win_close(state.right_win, true)
   vim.o.highlight = nil
+  vim.api.nvim_clear_autocmds({ group = cursor_move_group })
 end
 
 local function setup()

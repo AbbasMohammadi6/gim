@@ -36,20 +36,50 @@ local function get_modal_config()
 end
 
 local function get_files()
-  -- TODO: use vim.system for this
-  return vim.fn.systemlist('git diff --name-only')
-end
-
-local function get_file_diff(file)
-  local result = vim.system(
-    { 'git', 'diff', '--', file },
+  local result = vim.system({ 'git', 'status', '--porcelain' },
     { text = true }
   ):wait()
-  if result.code ~= 0 then return nil end
+
+  if result.code ~= 0 then return {} end
+
+  local output = {}
+
+  for _, v in pairs(vim.split(result.stdout, '\n')) do
+    if v ~= '' then
+      local status = v:sub(1, 2)
+      local file = v:sub(4)
+      -- output[status] = file
+      table.insert(output, { status = status, file = file })
+    end
+  end
+
+  return output
+end
+
+local function get_file_diff(status, file)
+  local git_cmd = {}
+  if status == '??' then
+    -- new file
+    git_cmd = { 'git', 'diff', '--no-index', '/dev/null', file }
+  elseif status:sub(1, 1) ~= ' ' then
+    -- staged files
+    git_cmd = { 'git', 'diff', '--cached', '--', file }
+  else
+    -- work tree files
+    git_cmd = { 'git', 'diff', '--', file }
+  end
+
+  local result = vim.system(git_cmd, { text = true }):wait()
+
+  -- exit codes:
+  -- 0 = no diff
+  -- 1 = diff exists
+  -- >1 = error
+  if result.code > 1 then return nil end
   return result.stdout
 end
 
-local insert_modes = { 'i', 'I', 'a', 'A', 'o', "O" }
+local insert_modes = { 'i', 'I', 'a', 'A', 'o', "O", 'd', 'D', 'x', 'X' }
 
 local function disable_insert_mode(buf)
   for _, mode in ipairs(insert_modes) do
@@ -93,8 +123,12 @@ local function open_modal()
   state.right_buf = right_buf
 
   local files = get_files()
+  local files_with_status = {}
+  for _, v in pairs(files) do
+    table.insert(files_with_status, v.status .. ' ' .. v.file)
+  end
 
-  vim.api.nvim_buf_set_lines(state.left_buf, 0, -1, true, files)
+  vim.api.nvim_buf_set_lines(state.left_buf, 0, -1, true, files_with_status)
   vim.api.nvim_buf_set_lines(state.right_buf, 0, -1, true, { 'diffs will apear here' })
 
   vim.api.nvim_set_option_value('winhighlight', 'CursorLine:MyPluginCursorLine', { win = left_win })
@@ -108,7 +142,7 @@ local function open_modal()
     callback = function()
       local row = vim.api.nvim_win_get_cursor(left_win)[1]
       local current_file = files[row]
-      local diff = get_file_diff(current_file)
+      local diff = get_file_diff(current_file.status, current_file.file)
       vim.api.nvim_buf_set_lines(state.right_buf, 0, -1, true, diff and vim.split(diff, '\n') or { 'no changes' })
     end
   })

@@ -49,6 +49,14 @@ local function get_file_diff(file)
   return result.stdout
 end
 
+local insert_modes = { 'i', 'I', 'a', 'A', 'o', "O" }
+
+local function disable_insert_mode(buf)
+  for _, mode in ipairs(insert_modes) do
+    vim.keymap.set('n', mode, '<nop>', { buffer = buf })
+  end
+end
+
 local function open_modal()
   local right_buf = create_buf()
   vim.bo[right_buf].filetype = 'diff'
@@ -104,6 +112,9 @@ local function open_modal()
       vim.api.nvim_buf_set_lines(state.right_buf, 0, -1, true, diff and vim.split(diff, '\n') or { 'no changes' })
     end
   })
+
+  disable_insert_mode(left_buf)
+  -- disable_insert_mode()
 end
 
 local function close_win()

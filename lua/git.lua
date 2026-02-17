@@ -1,6 +1,5 @@
 M = {}
 
-
 function M.get_files()
   local result = vim.system({ 'git', 'status', '--porcelain', '-uall' },
     { text = true }

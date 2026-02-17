@@ -6,7 +6,8 @@ M = {}
 local state = {
   list_win = nil,
   diff_win = nil,
-  diff_buf = nil
+  diff_buf = nil,
+  list_buf = nil,
 }
 
 local cursor_move_group = 'cursor_move'
@@ -48,9 +49,11 @@ local function disable_insert_mode(buf)
 end
 
 local function set_win_options()
-  local list_win = state.list_win
+  local list_win, diff_win = state.list_win, state.diff_win
   vim.api.nvim_set_option_value('winhighlight', 'CursorLine:MyPluginCursorLine', { win = list_win })
+  vim.api.nvim_set_option_value('winhighlight', 'CursorLine:MyPluginCursorLine', { win = diff_win })
   vim.api.nvim_set_option_value('cursorline', true, { win = list_win })
+  vim.api.nvim_set_option_value('cursorline', true, { win = diff_win })
   vim.api.nvim_set_option_value('number', true, { win = list_win })
   vim.api.nvim_set_option_value('relativenumber', true, { win = list_win })
 end
@@ -71,6 +74,14 @@ local function add_cursor_listener(files)
   })
 end
 
+local function win_focus_listner()
+  local list_win, diff_win, diff_buf, list_buf = state.list_win, state.diff_win, state.diff_buf, state.list_buf
+  if list_win and diff_win then
+    vim.keymap.set('n', '1', function() vim.api.nvim_set_current_win(list_win) end, { buffer = diff_buf })
+    vim.keymap.set('n', '2', function() vim.api.nvim_set_current_win(diff_win) end, { buffer = list_buf })
+  end
+end
+
 function M.open()
   local diff_buf = create_buf()
   vim.bo[diff_buf].filetype = 'diff'
@@ -85,6 +96,8 @@ function M.open()
     height = config.height,
     col = config.col + list_width + 2,
     row = config.row,
+    title = '2',
+    title_pos = 'center',
     relative = 'editor',
     style = 'minimal',
     border = 'rounded',
@@ -95,6 +108,8 @@ function M.open()
     height = config.height,
     col = config.col,
     row = config.row,
+    title = '1',
+    title_pos = 'center',
     relative = 'editor',
     style = 'minimal',
     border = 'rounded',
@@ -103,6 +118,7 @@ function M.open()
   state.list_win = list_win
   state.diff_win = diff_win
   state.diff_buf = diff_buf
+  state.list_buf = list_buf
 
   local files = get_files()
   local files_with_status = {}
@@ -115,6 +131,7 @@ function M.open()
   set_win_options()
   add_cursor_listener(files)
   disable_insert_mode(list_buf)
+  win_focus_listner()
 end
 
 function M.close()
@@ -126,6 +143,7 @@ function M.close()
     state.list_win = nil
     state.diff_win = nil
     state.diff_buf = nil
+    state.list_buf = nil
   end
 end
 

@@ -67,6 +67,7 @@ local function add_cursor_listener(files)
     group = group,
     callback = function()
       local row = vim.api.nvim_win_get_cursor(list_win)[1]
+      if #files == 0 then return end
       local current_file = files[row]
       local diff = get_file_diff(current_file.status, current_file.file)
       vim.api.nvim_buf_set_lines(diff_buf, 0, -1, true, diff and vim.split(diff, '\n') or { 'no changes' })
@@ -126,7 +127,7 @@ function M.open()
     table.insert(files_with_status, v.status .. ' ' .. v.file)
   end
 
-  vim.api.nvim_buf_set_lines(list_buf, 0, -1, true, files_with_status)
+  vim.api.nvim_buf_set_lines(list_buf, 0, -1, true, #files_with_status ~= 0 and files_with_status or {'there are no changes'})
 
   set_win_options()
   add_cursor_listener(files)

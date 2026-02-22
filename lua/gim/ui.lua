@@ -1,5 +1,4 @@
 local git = require('gim.git')
-local get_file_diff, get_files = git.get_file_diff, git.get_files
 
 M = {}
 
@@ -69,7 +68,7 @@ local function add_cursor_listener(files)
       local row = vim.api.nvim_win_get_cursor(list_win)[1]
       if #files == 0 then return end
       local current_file = files[row]
-      local diff = get_file_diff(current_file.status, current_file.file)
+      local diff = git.get_file_diff(current_file.status, current_file.file)
       vim.api.nvim_buf_set_lines(diff_buf, 0, -1, true, diff and vim.split(diff, '\n') or { 'no changes' })
     end
   })
@@ -81,6 +80,19 @@ local function win_focus_listner()
     vim.keymap.set('n', '1', function() vim.api.nvim_set_current_win(list_win) end, { buffer = diff_buf })
     vim.keymap.set('n', '2', function() vim.api.nvim_set_current_win(diff_win) end, { buffer = list_buf })
   end
+end
+
+local function set_lines(files)
+  table.sort(files, function (a, b)
+    return a.file < b.file
+  end)
+  local files_with_status = {}
+  for _, v in pairs(files) do
+    table.insert(files_with_status, v.status .. ' ' .. v.file)
+  end
+
+  vim.api.nvim_buf_set_lines(state.list_buf, 0, -1, true,
+    #files_with_status ~= 0 and files_with_status or { 'there are no changes' })
 end
 
 function M.open()
@@ -121,18 +133,27 @@ function M.open()
   state.diff_buf = diff_buf
   state.list_buf = list_buf
 
-  local files = get_files()
-  local files_with_status = {}
-  for _, v in pairs(files) do
-    table.insert(files_with_status, v.status .. ' ' .. v.file)
-  end
-
-  vim.api.nvim_buf_set_lines(list_buf, 0, -1, true, #files_with_status ~= 0 and files_with_status or {'there are no changes'})
+  local files = git.get_files()
+  set_lines(files)
 
   set_win_options()
   add_cursor_listener(files)
   disable_insert_mode(list_buf)
   win_focus_listner()
+
+  vim.keymap.set('n', 'a', function()
+    local row = vim.api.nvim_win_get_cursor(list_win)[1]
+    local current_file = files[row].file
+    local result = git.stage(current_file)
+    if result.code == 0 then set_lines(git.get_files()) end
+  end, { buffer = list_buf })
+
+  vim.keymap.set('n', 'd', function()
+    local row = vim.api.nvim_win_get_cursor(list_win)[1]
+    local current_file = files[row].file
+    local result = git.unstage(current_file)
+    if result.code == 0 then set_lines(git.get_files()) end
+  end, { buffer = list_buf })
 end
 
 function M.close()

@@ -45,4 +45,12 @@ function M.get_file_diff(status, file)
   return result.stdout
 end
 
+function M.stage(file_name)
+  return vim.system({ 'git', 'add', file_name }):wait()
+end
+
+function M.unstage(file_name)
+  return vim.system({ 'git', 'restore', '--staged', file_name }):wait()
+end
+
 return M

@@ -1,4 +1,4 @@
-local git = require('lua.git')
+local git = require('gim.git')
 local get_file_diff, get_files = git.get_file_diff, git.get_files
 
 M = {}

@@ -13,6 +13,9 @@ local cursor_move_group = 'cursor_move'
 
 local insert_modes = { 'i', 'I', 'a', 'A', 'o', 'O', 'd', 'D', 'x', 'X' }
 
+local ns = vim.api.nvim_create_namespace('GimHighlights')
+local staged_hl = 'GimStagedTxt'
+
 local function create_buf()
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].modifiable = true
@@ -55,6 +58,7 @@ local function set_win_options()
   vim.api.nvim_set_option_value('cursorline', true, { win = diff_win })
   vim.api.nvim_set_option_value('number', true, { win = list_win })
   vim.api.nvim_set_option_value('relativenumber', true, { win = list_win })
+  vim.api.nvim_set_hl(0, staged_hl, { fg = '#569CD6' })
 end
 
 local function add_cursor_listener(files)
@@ -83,9 +87,7 @@ local function win_focus_listner()
 end
 
 local function set_lines(files)
-  table.sort(files, function (a, b)
-    return a.file < b.file
-  end)
+  table.sort(files, function(a, b) return a.file < b.file end)
   local files_with_status = {}
   for _, v in pairs(files) do
     table.insert(files_with_status, v.status .. ' ' .. v.file)
@@ -93,6 +95,39 @@ local function set_lines(files)
 
   vim.api.nvim_buf_set_lines(state.list_buf, 0, -1, true,
     #files_with_status ~= 0 and files_with_status or { 'there are no changes' })
+
+  vim.api.nvim_buf_clear_namespace(state.list_buf, ns, 0, -1) -- this prevents paints the save color over and over that is no efficient
+
+  for k, v in pairs(files) do
+    local first_char = v.status:sub(1, 1)
+    if first_char ~= ' ' then
+      vim.api.nvim_buf_set_extmark(state.list_buf, ns, --[[line]] k - 1, --[[column]] 0, { line_hl_group = staged_hl })
+    end
+  end
+end
+
+local function set_staging_listener(files)
+  vim.keymap.set('n', 'a', function()
+    local row = vim.api.nvim_win_get_cursor(state.list_win)[1]
+    local current_file = files[row].file
+    local result = git.stage(current_file)
+    if result.code == 0 then
+      local updated_files = git.get_files()
+      set_lines(updated_files)
+      add_cursor_listener(updated_files)
+    end
+  end, { buffer = state.list_buf })
+
+  vim.keymap.set('n', 'd', function()
+    local row = vim.api.nvim_win_get_cursor(state.list_win)[1]
+    local current_file = files[row].file
+    local result = git.unstage(current_file)
+    if result.code == 0 then
+      local updated_files = git.get_files()
+      set_lines(updated_files)
+      add_cursor_listener(updated_files)
+    end
+  end, { buffer = state.list_buf })
 end
 
 function M.open()
@@ -133,27 +168,15 @@ function M.open()
   state.diff_buf = diff_buf
   state.list_buf = list_buf
 
+  set_win_options()
+
   local files = git.get_files()
   set_lines(files)
 
-  set_win_options()
   add_cursor_listener(files)
   disable_insert_mode(list_buf)
   win_focus_listner()
-
-  vim.keymap.set('n', 'a', function()
-    local row = vim.api.nvim_win_get_cursor(list_win)[1]
-    local current_file = files[row].file
-    local result = git.stage(current_file)
-    if result.code == 0 then set_lines(git.get_files()) end
-  end, { buffer = list_buf })
-
-  vim.keymap.set('n', 'd', function()
-    local row = vim.api.nvim_win_get_cursor(list_win)[1]
-    local current_file = files[row].file
-    local result = git.unstage(current_file)
-    if result.code == 0 then set_lines(git.get_files()) end
-  end, { buffer = list_buf })
+  set_staging_listener(files)
 end
 
 function M.close()

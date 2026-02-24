@@ -21,8 +21,6 @@ function M.get_files()
 end
 
 function M.get_file_diff(status, file)
-  print(file)
-
   local git_cmd = {}
   if status == '??' then
     -- new file

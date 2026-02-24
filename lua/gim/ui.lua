@@ -131,6 +131,8 @@ local function set_staging_listener(files)
 end
 
 function M.open()
+  if state.diff_win or state.list_win then return end
+
   local diff_buf = create_buf()
   vim.bo[diff_buf].filetype = 'diff'
   local list_buf = create_buf()
